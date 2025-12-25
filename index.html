@@ -1,0 +1,222 @@
+import React, { useState, useMemo, useRef } from 'react'
+import { Canvas, useFrame } from '@react-three/fiber'
+import { PerspectiveCamera, OrbitControls, Stars } from '@react-three/drei'
+import { EffectComposer, Bloom, Noise, Vignette } from '@react-three/postprocessing'
+import * as THREE from 'three'
+
+// ---------------- 配置 ----------------
+const CONFIG = {
+  FOLIAGE_COUNT: 12000,
+  ORNAMENT_COUNT: 60,
+  TREE_HEIGHT: 10,
+  TREE_RADIUS: 4,
+  COLORS: {
+    SAGE: '#A8BBA1',
+    GOLD: '#F1C40F',
+    BG: '#050705'
+  }
+}
+
+// ---------------- 状态 ----------------
+const TreeState = {
+  TREE: 'TREE',
+  EXPLODING: 'EXPLODING',
+  SCATTERED: 'SCATTERED',
+  REASSEMBLING: 'REASSEMBLING'
+}
+
+// ---------------- 工具函数 ----------------
+const treePos = () => {
+  const y = Math.random() * CONFIG.TREE_HEIGHT
+  const r =
+    ((CONFIG.TREE_HEIGHT - y) / CONFIG.TREE_HEIGHT) *
+    CONFIG.TREE_RADIUS *
+    (0.8 + Math.random() * 0.4)
+  const a = Math.random() * Math.PI * 2
+  return new THREE.Vector3(
+    Math.cos(a) * r,
+    y - CONFIG.TREE_HEIGHT / 2,
+    Math.sin(a) * r
+  )
+}
+
+const scatterPos = () =>
+  new THREE.Vector3(
+    (Math.random() - 0.5) * 25,
+    (Math.random() - 0.5) * 25,
+    (Math.random() - 0.5) * 25
+  )
+
+// ---------------- Foliage ----------------
+function Foliage({ state }) {
+  const ref = useRef()
+
+  const data = useMemo(() => {
+    const t = new Float32Array(CONFIG.FOLIAGE_COUNT * 3)
+    const s = new Float32Array(CONFIG.FOLIAGE_COUNT * 3)
+    for (let i = 0; i < CONFIG.FOLIAGE_COUNT; i++) {
+      const tp = treePos()
+      const sp = scatterPos()
+      t.set([tp.x, tp.y, tp.z], i * 3)
+      s.set([sp.x, sp.y, sp.z], i * 3)
+    }
+    return { t, s }
+  }, [])
+
+  useFrame((_, d) => {
+    const pos = ref.current.geometry.attributes.position.array
+    const target = state === TreeState.SCATTED || state === TreeState.EXPLODING
+      ? data.s
+      : data.t
+    const speed = state === TreeState.REASSEMBLING ? 4 : 1.5
+
+    for (let i = 0; i < CONFIG.FOLIAGE_COUNT * 3; i++) {
+      pos[i] += (target[i] - pos[i]) * d * speed
+    }
+    ref.current.geometry.attributes.position.needsUpdate = true
+  })
+
+  return (
+    <points ref={ref}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          count={CONFIG.FOLIAGE_COUNT}
+          array={data.t.slice()}
+          itemSize={3}
+        />
+      </bufferGeometry>
+      <pointsMaterial
+        size={0.04}
+        color={CONFIG.COLORS.SAGE}
+        opacity={0.5}
+        transparent
+        blending={THREE.AdditiveBlending}
+      />
+    </points>
+  )
+}
+
+// ---------------- Ornaments ----------------
+function Ornaments({ state }) {
+  const ref = useRef()
+  const temp = new THREE.Object3D()
+
+  const items = useMemo(
+    () =>
+      Array.from({ length: CONFIG.ORNAMENT_COUNT }, (_, i) => ({
+        t: treePos(),
+        s: scatterPos(),
+        p: treePos(),
+        v: new THREE.Vector3(),
+        w: i % 5 === 0 ? 2 : i % 2 === 0 ? 1 : 0.5
+      })),
+    []
+  )
+
+  useFrame((_, d) => {
+    items.forEach((o, i) => {
+      if (state === TreeState.EXPLODING) {
+        const f = o.p.clone().normalize().multiplyScalar(12 * d / o.w)
+        o.v.add(f)
+        o.p.add(o.v)
+        o.v.multiplyScalar(0.96)
+      } else if (state === TreeState.SCATTED) {
+        o.p.lerp(o.s, d)
+      } else {
+        o.p.lerp(o.t, d * 3)
+        o.v.set(0, 0, 0)
+      }
+
+      temp.position.copy(o.p)
+      temp.updateMatrix()
+      ref.current.setMatrixAt(i, temp.matrix)
+    })
+    ref.current.instanceMatrix.needsUpdate = true
+  })
+
+  return (
+    <instancedMesh ref={ref} args={[null, null, CONFIG.ORNAMENT_COUNT]}>
+      <sphereGeometry args={[0.18, 16, 16]} />
+      <meshStandardMaterial
+        color={CONFIG.COLORS.GOLD}
+        emissive={CONFIG.COLORS.GOLD}
+        emissiveIntensity={2}
+        roughness={0}
+      />
+    </instancedMesh>
+  )
+}
+
+// ---------------- UI ----------------
+function Overlay({ state, toggle }) {
+  return (
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      <button
+        onClick={toggle}
+        style={{
+          pointerEvents: 'auto',
+          position: 'absolute',
+          bottom: 50,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'transparent',
+          border: '1px solid #F1C40F',
+          color: '#F1C40F',
+          padding: '12px 36px',
+          borderRadius: 30,
+          letterSpacing: 3,
+          cursor: 'pointer'
+        }}
+      >
+        {state === TreeState.TREE ? 'EXPLODE' : 'RESTORE'}
+      </button>
+    </div>
+  )
+}
+
+// ---------------- App ----------------
+export default function App() {
+  const [state, set] = useState(TreeState.TREE)
+
+  const toggle = () => {
+    if (state === TreeState.TREE) {
+      set(TreeState.EXPLODING)
+      setTimeout(() => set(TreeState.SCATTED), 1200)
+    } else {
+      set(TreeState.REASSEMBLING)
+      setTimeout(() => set(TreeState.TREE), 1800)
+    }
+  }
+
+  return (
+    <div style={{ width: '100vw', height: '100vh', background: CONFIG.COLORS.BG }}>
+      <Overlay state={state} toggle={toggle} />
+
+      <Canvas dpr={[1, 2]}>
+        <PerspectiveCamera makeDefault position={[0, 4, 18]} fov={35} />
+        <OrbitControls enableZoom={false} autoRotate={state === TreeState.SCATTED} />
+
+        <color attach="background" args={[CONFIG.COLORS.BG]} />
+        <fog attach="fog" args={[CONFIG.COLORS.BG, 15, 30]} />
+
+        <ambientLight intensity={0.5} />
+        <spotLight position={[10, 20, 10]} intensity={80} />
+        <pointLight position={[-10, -10, -10]} intensity={30} />
+
+        <group position={[0, -3, 0]}>
+          <Foliage state={state} />
+          <Ornaments state={state} />
+        </group>
+
+        <EffectComposer>
+          <Bloom intensity={1.4} />
+          <Noise opacity={0.04} />
+          <Vignette darkness={0.8} />
+        </EffectComposer>
+
+        <Stars radius={100} depth={50} count={3000} factor={4} fade />
+      </Canvas>
+    </div>
+  )
+}
