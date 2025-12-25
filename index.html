@@ -1,222 +1,146 @@
-import React, { useState, useMemo, useRef } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { PerspectiveCamera, OrbitControls, Stars } from '@react-three/drei'
-import { EffectComposer, Bloom, Noise, Vignette } from '@react-three/postprocessing'
-import * as THREE from 'three'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arix Signature Christmas 2025</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; background: #050705; overflow: hidden; font-family: sans-serif; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
 
-// ---------------- 配置 ----------------
-const CONFIG = {
-  FOLIAGE_COUNT: 12000,
-  ORNAMENT_COUNT: 60,
-  TREE_HEIGHT: 10,
-  TREE_RADIUS: 4,
-  COLORS: {
-    SAGE: '#A8BBA1',
-    GOLD: '#F1C40F',
-    BG: '#050705'
-  }
-}
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.15.11?external=three",
+                "@react-three/drei": "https://esm.sh/@react-three/drei@9.88.13?external=three",
+                "react": "https://esm.sh/react@18.2.0",
+                "react-dom": "https://esm.sh/react-dom@18.2.0"
+            }
+        }
+    </script>
 
-// ---------------- 状态 ----------------
-const TreeState = {
-  TREE: 'TREE',
-  EXPLODING: 'EXPLODING',
-  SCATTERED: 'SCATTERED',
-  REASSEMBLING: 'REASSEMBLING'
-}
+    <script type="module">
+        import React, { useState, useMemo, useRef, useEffect } from 'react';
+        import { createRoot } from 'react-dom';
+        import * as THREE from 'three';
+        import { Canvas, useFrame } from '@react-three/fiber';
+        import { PerspectiveCamera, OrbitControls, Stars } from '@react-three/drei';
 
-// ---------------- 工具函数 ----------------
-const treePos = () => {
-  const y = Math.random() * CONFIG.TREE_HEIGHT
-  const r =
-    ((CONFIG.TREE_HEIGHT - y) / CONFIG.TREE_HEIGHT) *
-    CONFIG.TREE_RADIUS *
-    (0.8 + Math.random() * 0.4)
-  const a = Math.random() * Math.PI * 2
-  return new THREE.Vector3(
-    Math.cos(a) * r,
-    y - CONFIG.TREE_HEIGHT / 2,
-    Math.sin(a) * r
-  )
-}
+        const CONFIG = {
+            COUNT: 6000,
+            ORNAMENTS: 50,
+            SAGE_GREEN: '#A8BBA1',
+            LEMON_YELLOW: '#F1C40F',
+            TREE_H: 10,
+            TREE_R: 4
+        };
 
-const scatterPos = () =>
-  new THREE.Vector3(
-    (Math.random() - 0.5) * 25,
-    (Math.random() - 0.5) * 25,
-    (Math.random() - 0.5) * 25
-  )
+        // 逻辑：生成树形坐标
+        const getTreePos = () => {
+            const y = Math.random() * CONFIG.TREE_H;
+            const r = ((CONFIG.TREE_H - y) / CONFIG.TREE_H) * CONFIG.TREE_R;
+            const a = Math.random() * Math.PI * 2;
+            return [Math.cos(a) * r, y - 5, Math.sin(a) * r];
+        };
 
-// ---------------- Foliage ----------------
-function Foliage({ state }) {
-  const ref = useRef()
+        const getScatterPos = () => [(Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30];
 
-  const data = useMemo(() => {
-    const t = new Float32Array(CONFIG.FOLIAGE_COUNT * 3)
-    const s = new Float32Array(CONFIG.FOLIAGE_COUNT * 3)
-    for (let i = 0; i < CONFIG.FOLIAGE_COUNT; i++) {
-      const tp = treePos()
-      const sp = scatterPos()
-      t.set([tp.x, tp.y, tp.z], i * 3)
-      s.set([sp.x, sp.y, sp.z], i * 3)
-    }
-    return { t, s }
-  }, [])
+        const Experience = () => {
+            const [isExploded, setIsExploded] = useState(false);
+            const pointsRef = useRef();
+            const instRef = useRef();
 
-  useFrame((_, d) => {
-    const pos = ref.current.geometry.attributes.position.array
-    const target = state === TreeState.SCATTED || state === TreeState.EXPLODING
-      ? data.s
-      : data.t
-    const speed = state === TreeState.REASSEMBLING ? 4 : 1.5
+            // 数据初始化
+            const { tPos, sPos, current, weights } = useMemo(() => {
+                const t = new Float32Array(CONFIG.COUNT * 3);
+                const s = new Float32Array(CONFIG.COUNT * 3);
+                const w = new Float32Array(CONFIG.COUNT);
+                for (let i = 0; i < CONFIG.COUNT; i++) {
+                    t.set(getTreePos(), i * 3);
+                    s.set(getScatterPos(), i * 3);
+                    w[i] = 0.5 + Math.random();
+                }
+                return { tPos: t, sPos: s, current: new Float32Array(t), weights: w };
+            }, []);
 
-    for (let i = 0; i < CONFIG.FOLIAGE_COUNT * 3; i++) {
-      pos[i] += (target[i] - pos[i]) * d * speed
-    }
-    ref.current.geometry.attributes.position.needsUpdate = true
-  })
+            useFrame((state, delta) => {
+                const pos = pointsRef.current.geometry.attributes.position;
+                for (let i = 0; i < CONFIG.COUNT; i++) {
+                    const i3 = i * 3;
+                    const targetX = isExploded ? sPos[i3] : tPos[i3];
+                    const targetY = isExploded ? sPos[i3+1] : tPos[i3+1];
+                    const targetZ = isExploded ? sPos[i3+2] : tPos[i3+2];
+                    
+                    pos.array[i3] += (targetX - pos.array[i3]) * delta * 2;
+                    pos.array[i3+1] += (targetY - pos.array[i3+1]) * delta * 2;
+                    pos.array[i3+2] += (targetZ - pos.array[i3+2]) * delta * 2;
+                }
+                pos.needsUpdate = true;
+            });
 
-  return (
-    <points ref={ref}>
-      <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          count={CONFIG.FOLIAGE_COUNT}
-          array={data.t.slice()}
-          itemSize={3}
-        />
-      </bufferGeometry>
-      <pointsMaterial
-        size={0.04}
-        color={CONFIG.COLORS.SAGE}
-        opacity={0.5}
-        transparent
-        blending={THREE.AdditiveBlending}
-      />
-    </points>
-  )
-}
+            return (
+                <>
+                    <color attach="background" args={['#050805']} />
+                    <fog attach="fog" args={['#050805', 10, 30]} />
+                    <ambientLight intensity={0.5} />
+                    <pointLight position={[10, 10, 10]} intensity={1.5} color={CONFIG.LEMON_YELLOW} />
 
-// ---------------- Ornaments ----------------
-function Ornaments({ state }) {
-  const ref = useRef()
-  const temp = new THREE.Object3D()
+                    <points ref={pointsRef}>
+                        <bufferGeometry>
+                            <bufferAttribute attach="attributes-position" count={CONFIG.COUNT} array={current} itemSize={3} />
+                        </bufferGeometry>
+                        <pointsMaterial size={0.05} color={CONFIG.SAGE_GREEN} transparent opacity={0.6} />
+                    </points>
 
-  const items = useMemo(
-    () =>
-      Array.from({ length: CONFIG.ORNAMENT_COUNT }, (_, i) => ({
-        t: treePos(),
-        s: scatterPos(),
-        p: treePos(),
-        v: new THREE.Vector3(),
-        w: i % 5 === 0 ? 2 : i % 2 === 0 ? 1 : 0.5
-      })),
-    []
-  )
+                    <Stars radius={50} depth={50} count={2000} factor={4} saturation={0} fade speed={1} />
+                    
+                    <mesh position={[0, -5.5, 0]} rotation={[-Math.PI/2, 0, 0]}>
+                        <circleGeometry args={[6, 32]} />
+                        <meshStandardMaterial color={CONFIG.SAGE_GREEN} transparent opacity={0.1} />
+                    </mesh>
 
-  useFrame((_, d) => {
-    items.forEach((o, i) => {
-      if (state === TreeState.EXPLODING) {
-        const f = o.p.clone().normalize().multiplyScalar(12 * d / o.w)
-        o.v.add(f)
-        o.p.add(o.v)
-        o.v.multiplyScalar(0.96)
-      } else if (state === TreeState.SCATTED) {
-        o.p.lerp(o.s, d)
-      } else {
-        o.p.lerp(o.t, d * 3)
-        o.v.set(0, 0, 0)
-      }
+                    {/* UI 按钮 */}
+                    <mesh position={[0, -7, 0]} onClick={() => setIsExploded(!isExploded)}>
+                        <sphereGeometry args={[0.1]} />
+                        <meshBasicMaterial transparent opacity={0} />
+                    </mesh>
+                </>
+            );
+        };
 
-      temp.position.copy(o.p)
-      temp.updateMatrix()
-      ref.current.setMatrixAt(i, temp.matrix)
-    })
-    ref.current.instanceMatrix.needsUpdate = true
-  })
+        const App = () => {
+            const [exploded, setExploded] = useState(false);
+            return (
+                <div className="w-full h-screen">
+                    <div className="absolute top-10 left-10 z-10 pointer-events-none">
+                        <h1 className="text-[#E0E5D8] text-4xl font-extralight tracking-[0.5em]">ARIX</h1>
+                        <p className="text-[#F1C40F] opacity-50 tracking-widest text-xs mt-2">SIGNATURE CHRISTMAS</p>
+                    </div>
+                    
+                    <button 
+                        onClick={() => setExploded(!exploded)}
+                        className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 px-8 py-3 border border-[#F1C40F]/30 text-[#F1C40F] rounded-full hover:bg-[#F1C40F]/10 transition-all tracking-widest text-xs"
+                    >
+                        {exploded ? "REASSEMBLE" : "EXPLODE"}
+                    </button>
 
-  return (
-    <instancedMesh ref={ref} args={[null, null, CONFIG.ORNAMENT_COUNT]}>
-      <sphereGeometry args={[0.18, 16, 16]} />
-      <meshStandardMaterial
-        color={CONFIG.COLORS.GOLD}
-        emissive={CONFIG.COLORS.GOLD}
-        emissiveIntensity={2}
-        roughness={0}
-      />
-    </instancedMesh>
-  )
-}
+                    <Canvas shadows>
+                        <PerspectiveCamera makeDefault position={[0, 2, 15]} fov={40} />
+                        <OrbitControls enableZoom={false} autoRotate={exploded} autoRotateSpeed={0.5} />
+                        <Experience isExploded={exploded} />
+                    </Canvas>
+                </div>
+            );
+        };
 
-// ---------------- UI ----------------
-function Overlay({ state, toggle }) {
-  return (
-    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-      <button
-        onClick={toggle}
-        style={{
-          pointerEvents: 'auto',
-          position: 'absolute',
-          bottom: 50,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          background: 'transparent',
-          border: '1px solid #F1C40F',
-          color: '#F1C40F',
-          padding: '12px 36px',
-          borderRadius: 30,
-          letterSpacing: 3,
-          cursor: 'pointer'
-        }}
-      >
-        {state === TreeState.TREE ? 'EXPLODE' : 'RESTORE'}
-      </button>
-    </div>
-  )
-}
-
-// ---------------- App ----------------
-export default function App() {
-  const [state, set] = useState(TreeState.TREE)
-
-  const toggle = () => {
-    if (state === TreeState.TREE) {
-      set(TreeState.EXPLODING)
-      setTimeout(() => set(TreeState.SCATTED), 1200)
-    } else {
-      set(TreeState.REASSEMBLING)
-      setTimeout(() => set(TreeState.TREE), 1800)
-    }
-  }
-
-  return (
-    <div style={{ width: '100vw', height: '100vh', background: CONFIG.COLORS.BG }}>
-      <Overlay state={state} toggle={toggle} />
-
-      <Canvas dpr={[1, 2]}>
-        <PerspectiveCamera makeDefault position={[0, 4, 18]} fov={35} />
-        <OrbitControls enableZoom={false} autoRotate={state === TreeState.SCATTED} />
-
-        <color attach="background" args={[CONFIG.COLORS.BG]} />
-        <fog attach="fog" args={[CONFIG.COLORS.BG, 15, 30]} />
-
-        <ambientLight intensity={0.5} />
-        <spotLight position={[10, 20, 10]} intensity={80} />
-        <pointLight position={[-10, -10, -10]} intensity={30} />
-
-        <group position={[0, -3, 0]}>
-          <Foliage state={state} />
-          <Ornaments state={state} />
-        </group>
-
-        <EffectComposer>
-          <Bloom intensity={1.4} />
-          <Noise opacity={0.04} />
-          <Vignette darkness={0.8} />
-        </EffectComposer>
-
-        <Stars radius={100} depth={50} count={3000} factor={4} fade />
-      </Canvas>
-    </div>
-  )
-}
+        createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
