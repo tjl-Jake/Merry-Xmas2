@@ -1,146 +1,159 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Arix Signature Christmas 2025</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; background: #050705; overflow: hidden; font-family: sans-serif; }
-        canvas { display: block; }
+        body { margin: 0; background-color: #050705; overflow: hidden; color: #E0E5D8; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        .ui-layer { pointer-events: none; position: absolute; inset: 0; z-index: 10; }
+        .interactive { pointer-events: auto; }
+        /* 极致平滑的淡入效果 */
+        #root { animation: fadeIn 2s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root">
+        <div class="ui-layer flex flex-col justify-between p-10">
+            <div>
+                <h1 class="text-4xl font-extralight tracking-[0.6em] mb-2">ARIX</h1>
+                <div class="h-[1px] w-20 bg-[#F1C40F] opacity-50"></div>
+                <p class="text-[10px] tracking-[0.3em] mt-4 opacity-40">SIGNATURE INTERACTIVE / 2025</p>
+            </div>
+            
+            <div class="flex justify-center pb-10">
+                <button id="toggleBtn" class="interactive px-10 py-3 border border-[#F1C40F]/30 text-[#F1C40F] rounded-full hover:bg-[#F1C40F]/10 transition-all duration-700 text-[10px] tracking-[0.4em]">
+                    EXPLODE EXPERIENCE
+                </button>
+            </div>
+        </div>
+        <div id="canvas-container"></div>
+    </div>
 
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-                "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.15.11?external=three",
-                "@react-three/drei": "https://esm.sh/@react-three/drei@9.88.13?external=three",
-                "react": "https://esm.sh/react@18.2.0",
-                "react-dom": "https://esm.sh/react-dom@18.2.0"
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+
+    <script>
+        // --- 核心逻辑：原生 Three.js 保证 100% 兼容性 ---
+        let scene, camera, renderer, particles, ornaments;
+        let isExploded = false;
+        const count = 8000;
+        const treePositions = new Float32Array(count * 3);
+        const scatterPositions = new Float32Array(count * 3);
+        const currentPositions = new Float32Array(count * 3);
+        const velocities = new Float32Array(count * 3);
+
+        function init() {
+            // 场景初始化
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x050705, 10, 30);
+            
+            camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 3, 15);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // 生成坐标
+            for (let i = 0; i < count; i++) {
+                // 树形坐标 (圆锥分布)
+                const y = Math.random() * 10;
+                const r = ((10 - y) / 10) * 3.5;
+                const a = Math.random() * Math.PI * 2;
+                const tx = Math.cos(a) * r;
+                const ty = y - 5;
+                const tz = Math.sin(a) * r;
+                treePositions.set([tx, ty, tz], i * 3);
+                currentPositions.set([tx, ty, tz], i * 3);
+
+                // 散落坐标 (球形随机)
+                const sx = (Math.random() - 0.5) * 25;
+                const sy = (Math.random() - 0.5) * 25;
+                const sz = (Math.random() - 0.5) * 25;
+                scatterPositions.set([sx, sy, sz], i * 3);
             }
+
+            // 粒子系统 (针叶)
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(currentPositions, 3));
+            const mat = new THREE.PointsMaterial({
+                color: 0xA8BBA1,
+                size: 0.04,
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending
+            });
+            particles = new THREE.Points(geo, mat);
+            scene.add(particles);
+
+            // 装饰物 (实例化小灯点)
+            const ornaGeo = new THREE.SphereGeometry(0.1, 8, 8);
+            const ornaMat = new THREE.MeshBasicMaterial({ color: 0xF1C40F });
+            ornaments = new THREE.Group();
+            for(let i=0; i<40; i++) {
+                const m = new THREE.Mesh(ornaGeo, ornaMat);
+                const idx = Math.floor(Math.random() * count) * 3;
+                m.position.set(treePositions[idx], treePositions[idx+1], treePositions[idx+2]);
+                ornaments.add(m);
+            }
+            scene.add(ornaments);
+
+            // 灯光
+            const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambient);
+            const point = new THREE.PointLight(0xF1C40F, 2, 50);
+            point.position.set(5, 5, 5);
+            scene.add(point);
+
+            animate();
         }
-    </script>
 
-    <script type="module">
-        import React, { useState, useMemo, useRef, useEffect } from 'react';
-        import { createRoot } from 'react-dom';
-        import * as THREE from 'three';
-        import { Canvas, useFrame } from '@react-three/fiber';
-        import { PerspectiveCamera, OrbitControls, Stars } from '@react-three/drei';
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const pos = particles.geometry.attributes.position;
+            const lerpFactor = isExploded ? 0.02 : 0.05;
 
-        const CONFIG = {
-            COUNT: 6000,
-            ORNAMENTS: 50,
-            SAGE_GREEN: '#A8BBA1',
-            LEMON_YELLOW: '#F1C40F',
-            TREE_H: 10,
-            TREE_R: 4
-        };
+            for (let i = 0; i < count; i++) {
+                const i3 = i * 3;
+                const tx = isExploded ? scatterPositions[i3] : treePositions[i3];
+                const ty = isExploded ? scatterPositions[i3+1] : treePositions[i3+1];
+                const tz = isExploded ? scatterPositions[i3+2] : treePositions[i3+2];
 
-        // 逻辑：生成树形坐标
-        const getTreePos = () => {
-            const y = Math.random() * CONFIG.TREE_H;
-            const r = ((CONFIG.TREE_H - y) / CONFIG.TREE_H) * CONFIG.TREE_R;
-            const a = Math.random() * Math.PI * 2;
-            return [Math.cos(a) * r, y - 5, Math.sin(a) * r];
-        };
+                pos.array[i3] += (tx - pos.array[i3]) * lerpFactor;
+                pos.array[i3+1] += (ty - pos.array[i3+1]) * lerpFactor;
+                pos.array[i3+2] += (tz - pos.array[i3+2]) * lerpFactor;
+            }
+            pos.needsUpdate = true;
 
-        const getScatterPos = () => [(Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30];
-
-        const Experience = () => {
-            const [isExploded, setIsExploded] = useState(false);
-            const pointsRef = useRef();
-            const instRef = useRef();
-
-            // 数据初始化
-            const { tPos, sPos, current, weights } = useMemo(() => {
-                const t = new Float32Array(CONFIG.COUNT * 3);
-                const s = new Float32Array(CONFIG.COUNT * 3);
-                const w = new Float32Array(CONFIG.COUNT);
-                for (let i = 0; i < CONFIG.COUNT; i++) {
-                    t.set(getTreePos(), i * 3);
-                    s.set(getScatterPos(), i * 3);
-                    w[i] = 0.5 + Math.random();
-                }
-                return { tPos: t, sPos: s, current: new Float32Array(t), weights: w };
-            }, []);
-
-            useFrame((state, delta) => {
-                const pos = pointsRef.current.geometry.attributes.position;
-                for (let i = 0; i < CONFIG.COUNT; i++) {
-                    const i3 = i * 3;
-                    const targetX = isExploded ? sPos[i3] : tPos[i3];
-                    const targetY = isExploded ? sPos[i3+1] : tPos[i3+1];
-                    const targetZ = isExploded ? sPos[i3+2] : tPos[i3+2];
-                    
-                    pos.array[i3] += (targetX - pos.array[i3]) * delta * 2;
-                    pos.array[i3+1] += (targetY - pos.array[i3+1]) * delta * 2;
-                    pos.array[i3+2] += (targetZ - pos.array[i3+2]) * delta * 2;
-                }
-                pos.needsUpdate = true;
+            // 装饰物同步
+            ornaments.children.forEach((m, i) => {
+                m.position.x += (pos.array[i*100] - m.position.x) * 0.1;
+                m.position.y += (pos.array[i*100+1] - m.position.y) * 0.1;
+                m.position.z += (pos.array[i*100+2] - m.position.z) * 0.1;
             });
 
-            return (
-                <>
-                    <color attach="background" args={['#050805']} />
-                    <fog attach="fog" args={['#050805', 10, 30]} />
-                    <ambientLight intensity={0.5} />
-                    <pointLight position={[10, 10, 10]} intensity={1.5} color={CONFIG.LEMON_YELLOW} />
+            scene.rotation.y += 0.002;
+            renderer.render(scene, camera);
+        }
 
-                    <points ref={pointsRef}>
-                        <bufferGeometry>
-                            <bufferAttribute attach="attributes-position" count={CONFIG.COUNT} array={current} itemSize={3} />
-                        </bufferGeometry>
-                        <pointsMaterial size={0.05} color={CONFIG.SAGE_GREEN} transparent opacity={0.6} />
-                    </points>
-
-                    <Stars radius={50} depth={50} count={2000} factor={4} saturation={0} fade speed={1} />
-                    
-                    <mesh position={[0, -5.5, 0]} rotation={[-Math.PI/2, 0, 0]}>
-                        <circleGeometry args={[6, 32]} />
-                        <meshStandardMaterial color={CONFIG.SAGE_GREEN} transparent opacity={0.1} />
-                    </mesh>
-
-                    {/* UI 按钮 */}
-                    <mesh position={[0, -7, 0]} onClick={() => setIsExploded(!isExploded)}>
-                        <sphereGeometry args={[0.1]} />
-                        <meshBasicMaterial transparent opacity={0} />
-                    </mesh>
-                </>
-            );
+        // 交互逻辑
+        document.getElementById('toggleBtn').onclick = function() {
+            isExploded = !isExploded;
+            this.innerText = isExploded ? "RESTORE HARMONY" : "EXPLODE EXPERIENCE";
         };
 
-        const App = () => {
-            const [exploded, setExploded] = useState(false);
-            return (
-                <div className="w-full h-screen">
-                    <div className="absolute top-10 left-10 z-10 pointer-events-none">
-                        <h1 className="text-[#E0E5D8] text-4xl font-extralight tracking-[0.5em]">ARIX</h1>
-                        <p className="text-[#F1C40F] opacity-50 tracking-widest text-xs mt-2">SIGNATURE CHRISTMAS</p>
-                    </div>
-                    
-                    <button 
-                        onClick={() => setExploded(!exploded)}
-                        className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 px-8 py-3 border border-[#F1C40F]/30 text-[#F1C40F] rounded-full hover:bg-[#F1C40F]/10 transition-all tracking-widest text-xs"
-                    >
-                        {exploded ? "REASSEMBLE" : "EXPLODE"}
-                    </button>
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
 
-                    <Canvas shadows>
-                        <PerspectiveCamera makeDefault position={[0, 2, 15]} fov={40} />
-                        <OrbitControls enableZoom={false} autoRotate={exploded} autoRotateSpeed={0.5} />
-                        <Experience isExploded={exploded} />
-                    </Canvas>
-                </div>
-            );
-        };
-
-        createRoot(document.getElementById('root')).render(<App />);
+        init();
     </script>
 </body>
 </html>
