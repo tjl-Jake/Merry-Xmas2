@@ -3,30 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arix Signature Interactive Tree</title>
+    <title>Arix Signature - Interactive Christmas 2025</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; background-color: #060806; overflow: hidden; color: #E0E5D8; font-family: 'Inter', sans-serif; }
-        #canvas-container { width: 100vw; height: 100vh; filter: contrast(1.1) brightness(1.1); }
-        .ui-layer { pointer-events: none; position: absolute; inset: 0; z-index: 10; background: radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.4) 100%); }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;300&display=swap');
+        body { margin: 0; background-color: #040604; overflow: hidden; color: #E0E5D8; font-family: 'Inter', sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        .ui-layer { pointer-events: none; position: absolute; inset: 0; z-index: 10; }
         .interactive { pointer-events: auto; }
-        .logo-text { letter-spacing: 0.8em; font-weight: 200; }
-        #loading { position: fixed; inset: 0; background: #060806; display: flex; justify-content: center; align-items: center; z-index: 100; transition: opacity 1s; }
+        .btn-glow { box-shadow: 0 0 20px rgba(241, 196, 15, 0.1); }
+        #loading { position: fixed; inset: 0; background: #040604; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; transition: opacity 1.5s; }
     </style>
 </head>
 <body>
-    <div id="loading">DECORATING...</div>
+    <div id="loading">
+        <div class="w-12 h-12 border-2 border-[#F1C40F] border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p class="text-[10px] tracking-[0.5em] text-[#F1C40F]">CRAFTING SIGNATURE ELEMENTS...</p>
+    </div>
 
     <div id="root">
         <div class="ui-layer flex flex-col justify-between p-12">
-            <div class="animate-pulse">
-                <h1 class="logo-text text-3xl">ARIX</h1>
-                <p class="text-[9px] tracking-[0.4em] mt-4 text-[#F1C40F] opacity-70 uppercase">Signature Interactive Christmas</p>
+            <div>
+                <h1 class="text-4xl font-thin tracking-[0.8em]">ARIX</h1>
+                <p class="text-[10px] tracking-[0.4em] mt-4 text-[#F1C40F] opacity-80 uppercase">Exclusive 3D Experience</p>
             </div>
             
             <div class="flex justify-center pb-12">
-                <button id="toggleBtn" class="interactive px-12 py-4 border border-[#F1C40F]/20 text-[#F1C40F] rounded-full hover:bg-[#F1C40F]/10 transition-all duration-1000 text-[10px] tracking-[0.5em] backdrop-blur-sm">
-                    INITIATE EXPLOSION
+                <button id="toggleBtn" class="interactive btn-glow px-14 py-4 border border-[#F1C40F]/30 text-[#F1C40F] rounded-full hover:bg-[#F1C40F]/10 transition-all duration-1000 text-[10px] tracking-[0.5em] backdrop-blur-md">
+                    UNLEASH MAGIC
                 </button>
             </div>
         </div>
@@ -36,164 +40,173 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
 
     <script>
-        let scene, camera, renderer, particles, ornamentGroup;
+        let scene, camera, renderer, foliage, ornaments = [];
         let isExploded = false;
-        const count = 12000; // 增加粒子量提升高保真感
+        const count = 15000; 
         
-        // 存储数据
         const data = {
             treePos: new Float32Array(count * 3),
             scatterPos: new Float32Array(count * 3),
-            weights: new Float32Array(count),
-            currentPos: new Float32Array(count * 3)
+            currentPos: new Float32Array(count * 3),
+            weights: new Float32Array(count)
         };
 
         function init() {
             scene = new THREE.Scene();
-            scene.fog = new THREE.Fog(0x060806, 5, 25);
+            scene.fog = new THREE.Fog(0x040604, 8, 28);
             
-            camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 4, 18);
+            camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 20);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            renderer.toneMapping = THREE.ReinhardToneMapping;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-            // 1. 初始化坐标与权重
+            createDistribution();
+            createFoliage();
+            createSignatureOrnaments();
+
+            // 灯光系统
+            const mainLight = new THREE.PointLight(0xF1C40F, 50, 100);
+            mainLight.position.set(5, 5, 5);
+            scene.add(mainLight);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+
+            document.getElementById('loading').style.opacity = '0';
+            setTimeout(() => document.getElementById('loading').remove(), 1500);
+
+            animate();
+        }
+
+        function createDistribution() {
             for (let i = 0; i < count; i++) {
                 const i3 = i * 3;
-                // 圣诞树：双层螺旋分布
-                const y = Math.random() * 11;
-                const ratio = (11 - y) / 11;
-                const angle = y * 1.5 + (Math.random() * 0.5); 
-                const radius = ratio * 4;
-                
-                data.treePos[i3] = Math.cos(angle) * radius;
-                data.treePos[i3+1] = y - 5;
-                data.treePos[i3+2] = Math.sin(angle) * radius;
+                // 树形：分层圆锥
+                const y = Math.random() * 12;
+                const r = ((12 - y) / 12) * 4.5;
+                const a = Math.random() * Math.PI * 2;
+                data.treePos[i3] = Math.cos(a) * r;
+                data.treePos[i3+1] = y - 6;
+                data.treePos[i3+2] = Math.sin(a) * r;
 
-                // 散落：加入一点飘逸的扰动
-                data.scatterPos[i3] = (Math.random() - 0.5) * 30;
-                data.scatterPos[i3+1] = (Math.random() - 0.5) * 25;
-                data.scatterPos[i3+2] = (Math.random() - 0.5) * 30;
+                // 散落：加入偏心爆炸算法
+                const explodeRadius = 15 + Math.random() * 10;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos((Math.random() * 2) - 1);
+                data.scatterPos[i3] = explodeRadius * Math.sin(phi) * Math.cos(theta);
+                data.scatterPos[i3+1] = explodeRadius * Math.sin(phi) * Math.sin(theta);
+                data.scatterPos[i3+2] = explodeRadius * Math.cos(phi);
 
-                // 权重：底部和大的粒子更重
-                data.weights[i] = 0.02 + Math.random() * 0.08;
+                // 权重：影响移动速度
+                data.weights[i] = 0.01 + Math.random() * 0.05;
                 
                 data.currentPos[i3] = data.treePos[i3];
                 data.currentPos[i3+1] = data.treePos[i3+1];
                 data.currentPos[i3+2] = data.treePos[i3+2];
             }
+        }
 
-            // 2. 针叶粒子层 (带有边缘高亮感的材质)
+        function createFoliage() {
             const geo = new THREE.BufferGeometry();
             geo.setAttribute('position', new THREE.BufferAttribute(data.currentPos, 3));
+            
+            // 使用自定义着色器模拟边缘金色光晕
             const mat = new THREE.PointsMaterial({
-                color: 0xA8BBA1,
-                size: 0.035,
+                color: 0x95A5A6, // 浅绿底色
+                size: 0.06,
                 transparent: true,
-                opacity: 0.8,
+                opacity: 0.7,
                 blending: THREE.AdditiveBlending,
                 depthWrite: false
             });
-            particles = new THREE.Points(geo, mat);
-            scene.add(particles);
-
-            // 3. 装饰物系统 (InstancedMesh 模拟重型元素)
-            initOrnaments();
-
-            // 4. 环境光与辉光灯
-            const ambient = new THREE.AmbientLight(0x404040, 1);
-            scene.add(ambient);
-            const spot = new THREE.SpotLight(0xF1C40F, 10);
-            spot.position.set(10, 20, 10);
-            scene.add(spot);
-
-            document.getElementById('loading').style.opacity = '0';
-            setTimeout(() => document.getElementById('loading').remove(), 1000);
-
-            animate();
+            foliage = new THREE.Points(geo, mat);
+            scene.add(foliage);
         }
 
-        function initOrnaments() {
-            ornamentGroup = new THREE.Group();
-            // 礼物盒形态 (Cube)
-            const boxGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+        function createSignatureOrnaments() {
             const lemonMat = new THREE.MeshStandardMaterial({ 
                 color: 0xF1C40F, 
                 emissive: 0xF1C40F, 
-                emissiveIntensity: 2,
-                roughness: 0 
+                emissiveIntensity: 3, 
+                metalness: 0.9, 
+                roughness: 0.1 
             });
 
-            // 可爱兔头形态 (简易组合)
-            const rabbitHead = new THREE.SphereGeometry(0.15, 16, 16);
+            // 1. 礼物盒 (重型)
+            const boxGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+            
+            // 2. 兔头 (球体 + 两个椭圆长耳)
+            const rabbitGeo = new THREE.SphereGeometry(0.2, 12, 12);
+            const earGeo = new THREE.CapsuleGeometry(0.05, 0.2, 4, 8);
 
-            for(let i=0; i<60; i++) {
-                const isBox = Math.random() > 0.6;
-                const mesh = new THREE.Mesh(isBox ? boxGeo : rabbitHead, lemonMat);
+            for(let i=0; i<50; i++) {
+                const group = new THREE.Group();
+                const isBox = Math.random() > 0.5;
                 
-                // 分配位置索引
+                if(isBox) {
+                    const box = new THREE.Mesh(boxGeo, lemonMat);
+                    group.add(box);
+                } else {
+                    const head = new THREE.Mesh(rabbitGeo, lemonMat);
+                    const earL = new THREE.Mesh(earGeo, lemonMat);
+                    const earR = new THREE.Mesh(earGeo, lemonMat);
+                    earL.position.set(-0.1, 0.25, 0);
+                    earL.rotation.z = 0.3;
+                    earR.position.set(0.1, 0.25, 0);
+                    earR.rotation.z = -0.3;
+                    group.add(head, earL, earR);
+                }
+
                 const idx = Math.floor(Math.random() * count);
-                mesh.userData = { 
+                group.userData = { 
                     idx: idx, 
-                    offset: Math.random() * 2,
-                    rotSpeed: (Math.random() - 0.5) * 0.05 
+                    weight: isBox ? 0.01 : 0.03, // 礼物盒更重，移动更慢
+                    rot: (Math.random() - 0.5) * 0.04 
                 };
-                ornamentGroup.add(mesh);
+                ornaments.push(group);
+                scene.add(group);
             }
-            scene.add(ornamentGroup);
         }
 
         function animate() {
             requestAnimationFrame(animate);
             const time = Date.now() * 0.001;
-            
-            // 粒子物理逻辑
-            const pos = particles.geometry.attributes.position;
+            const posAttr = foliage.geometry.attributes.position;
+
             for (let i = 0; i < count; i++) {
                 const i3 = i * 3;
-                const weight = data.weights[i];
                 const targetX = isExploded ? data.scatterPos[i3] : data.treePos[i3];
                 const targetY = isExploded ? data.scatterPos[i3+1] : data.treePos[i3+1];
                 const targetZ = isExploded ? data.scatterPos[i3+2] : data.treePos[i3+2];
 
-                // 核心：基于权重的阻尼插值
-                const speed = isExploded ? weight * 0.5 : 0.08;
-                pos.array[i3] += (targetX - pos.array[i3]) * speed;
-                pos.array[i3+1] += (targetY - pos.array[i3+1]) * speed;
-                pos.array[i3+2] += (targetZ - pos.array[i3+2]) * speed;
-                
-                // 呼吸感微动
-                if(!isExploded) {
-                    pos.array[i3] += Math.sin(time + i) * 0.002;
-                    pos.array[i3+2] += Math.cos(time + i) * 0.002;
-                }
+                const lerp = isExploded ? data.weights[i] : 0.06;
+                posAttr.array[i3] += (targetX - posAttr.array[i3]) * lerp;
+                posAttr.array[i3+1] += (targetY - posAttr.array[i3+1]) * lerp;
+                posAttr.array[i3+2] += (targetZ - posAttr.array[i3+2]) * lerp;
             }
-            pos.needsUpdate = true;
+            posAttr.needsUpdate = true;
 
-            // 装饰物物理同步
-            ornamentGroup.children.forEach(m => {
-                const idx3 = m.userData.idx * 3;
-                m.position.x = pos.array[idx3];
-                m.position.y = pos.array[idx3+1];
-                m.position.z = pos.array[idx3+2];
-                
-                m.rotation.x += m.userData.rotSpeed;
-                m.rotation.y += m.userData.rotSpeed;
+            // 同步装饰物并加入自转
+            ornaments.forEach(obj => {
+                const idx3 = obj.userData.idx * 3;
+                obj.position.x = posAttr.array[idx3];
+                obj.position.y = posAttr.array[idx3+1];
+                obj.position.z = posAttr.array[idx3+2];
+                obj.rotation.y += obj.userData.rot;
+                obj.rotation.z += obj.userData.rot * 0.5;
             });
 
-            scene.rotation.y += 0.001;
+            scene.rotation.y += 0.0015;
             renderer.render(scene, camera);
         }
 
         document.getElementById('toggleBtn').onclick = function() {
             isExploded = !isExploded;
-            this.innerText = isExploded ? "RESTORE HARMONY" : "INITIATE EXPLOSION";
-            this.style.borderColor = isExploded ? "rgba(168, 187, 161, 0.5)" : "rgba(241, 196, 15, 0.2)";
-            this.style.color = isExploded ? "#A8BBA1" : "#F1C40F";
+            this.innerText = isExploded ? "RESTORE HARMONY" : "UNLEASH MAGIC";
+            this.style.color = isExploded ? "#95A5A6" : "#F1C40F";
+            this.style.borderColor = isExploded ? "#95A5A6" : "#F1C40F";
         };
 
         window.addEventListener('resize', () => {
