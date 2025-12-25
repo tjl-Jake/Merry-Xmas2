@@ -3,30 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arix Signature Christmas 2025</title>
+    <title>Arix Signature Interactive Tree</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; background-color: #050705; overflow: hidden; color: #E0E5D8; }
-        #canvas-container { width: 100vw; height: 100vh; }
-        .ui-layer { pointer-events: none; position: absolute; inset: 0; z-index: 10; }
+        body { margin: 0; background-color: #060806; overflow: hidden; color: #E0E5D8; font-family: 'Inter', sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; filter: contrast(1.1) brightness(1.1); }
+        .ui-layer { pointer-events: none; position: absolute; inset: 0; z-index: 10; background: radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.4) 100%); }
         .interactive { pointer-events: auto; }
-        /* 极致平滑的淡入效果 */
-        #root { animation: fadeIn 2s ease-in; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .logo-text { letter-spacing: 0.8em; font-weight: 200; }
+        #loading { position: fixed; inset: 0; background: #060806; display: flex; justify-content: center; align-items: center; z-index: 100; transition: opacity 1s; }
     </style>
 </head>
 <body>
+    <div id="loading">DECORATING...</div>
+
     <div id="root">
-        <div class="ui-layer flex flex-col justify-between p-10">
-            <div>
-                <h1 class="text-4xl font-extralight tracking-[0.6em] mb-2">ARIX</h1>
-                <div class="h-[1px] w-20 bg-[#F1C40F] opacity-50"></div>
-                <p class="text-[10px] tracking-[0.3em] mt-4 opacity-40">SIGNATURE INTERACTIVE / 2025</p>
+        <div class="ui-layer flex flex-col justify-between p-12">
+            <div class="animate-pulse">
+                <h1 class="logo-text text-3xl">ARIX</h1>
+                <p class="text-[9px] tracking-[0.4em] mt-4 text-[#F1C40F] opacity-70 uppercase">Signature Interactive Christmas</p>
             </div>
             
-            <div class="flex justify-center pb-10">
-                <button id="toggleBtn" class="interactive px-10 py-3 border border-[#F1C40F]/30 text-[#F1C40F] rounded-full hover:bg-[#F1C40F]/10 transition-all duration-700 text-[10px] tracking-[0.4em]">
-                    EXPLODE EXPERIENCE
+            <div class="flex justify-center pb-12">
+                <button id="toggleBtn" class="interactive px-12 py-4 border border-[#F1C40F]/20 text-[#F1C40F] rounded-full hover:bg-[#F1C40F]/10 transition-all duration-1000 text-[10px] tracking-[0.5em] backdrop-blur-sm">
+                    INITIATE EXPLOSION
                 </button>
             </div>
         </div>
@@ -36,115 +36,164 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
 
     <script>
-        // --- 核心逻辑：原生 Three.js 保证 100% 兼容性 ---
-        let scene, camera, renderer, particles, ornaments;
+        let scene, camera, renderer, particles, ornamentGroup;
         let isExploded = false;
-        const count = 8000;
-        const treePositions = new Float32Array(count * 3);
-        const scatterPositions = new Float32Array(count * 3);
-        const currentPositions = new Float32Array(count * 3);
-        const velocities = new Float32Array(count * 3);
+        const count = 12000; // 增加粒子量提升高保真感
+        
+        // 存储数据
+        const data = {
+            treePos: new Float32Array(count * 3),
+            scatterPos: new Float32Array(count * 3),
+            weights: new Float32Array(count),
+            currentPos: new Float32Array(count * 3)
+        };
 
         function init() {
-            // 场景初始化
             scene = new THREE.Scene();
-            scene.fog = new THREE.Fog(0x050705, 10, 30);
+            scene.fog = new THREE.Fog(0x060806, 5, 25);
             
-            camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 3, 15);
+            camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 4, 18);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.toneMapping = THREE.ReinhardToneMapping;
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-            // 生成坐标
+            // 1. 初始化坐标与权重
             for (let i = 0; i < count; i++) {
-                // 树形坐标 (圆锥分布)
-                const y = Math.random() * 10;
-                const r = ((10 - y) / 10) * 3.5;
-                const a = Math.random() * Math.PI * 2;
-                const tx = Math.cos(a) * r;
-                const ty = y - 5;
-                const tz = Math.sin(a) * r;
-                treePositions.set([tx, ty, tz], i * 3);
-                currentPositions.set([tx, ty, tz], i * 3);
+                const i3 = i * 3;
+                // 圣诞树：双层螺旋分布
+                const y = Math.random() * 11;
+                const ratio = (11 - y) / 11;
+                const angle = y * 1.5 + (Math.random() * 0.5); 
+                const radius = ratio * 4;
+                
+                data.treePos[i3] = Math.cos(angle) * radius;
+                data.treePos[i3+1] = y - 5;
+                data.treePos[i3+2] = Math.sin(angle) * radius;
 
-                // 散落坐标 (球形随机)
-                const sx = (Math.random() - 0.5) * 25;
-                const sy = (Math.random() - 0.5) * 25;
-                const sz = (Math.random() - 0.5) * 25;
-                scatterPositions.set([sx, sy, sz], i * 3);
+                // 散落：加入一点飘逸的扰动
+                data.scatterPos[i3] = (Math.random() - 0.5) * 30;
+                data.scatterPos[i3+1] = (Math.random() - 0.5) * 25;
+                data.scatterPos[i3+2] = (Math.random() - 0.5) * 30;
+
+                // 权重：底部和大的粒子更重
+                data.weights[i] = 0.02 + Math.random() * 0.08;
+                
+                data.currentPos[i3] = data.treePos[i3];
+                data.currentPos[i3+1] = data.treePos[i3+1];
+                data.currentPos[i3+2] = data.treePos[i3+2];
             }
 
-            // 粒子系统 (针叶)
+            // 2. 针叶粒子层 (带有边缘高亮感的材质)
             const geo = new THREE.BufferGeometry();
-            geo.setAttribute('position', new THREE.BufferAttribute(currentPositions, 3));
+            geo.setAttribute('position', new THREE.BufferAttribute(data.currentPos, 3));
             const mat = new THREE.PointsMaterial({
                 color: 0xA8BBA1,
-                size: 0.04,
+                size: 0.035,
                 transparent: true,
-                opacity: 0.6,
-                blending: THREE.AdditiveBlending
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
             });
             particles = new THREE.Points(geo, mat);
             scene.add(particles);
 
-            // 装饰物 (实例化小灯点)
-            const ornaGeo = new THREE.SphereGeometry(0.1, 8, 8);
-            const ornaMat = new THREE.MeshBasicMaterial({ color: 0xF1C40F });
-            ornaments = new THREE.Group();
-            for(let i=0; i<40; i++) {
-                const m = new THREE.Mesh(ornaGeo, ornaMat);
-                const idx = Math.floor(Math.random() * count) * 3;
-                m.position.set(treePositions[idx], treePositions[idx+1], treePositions[idx+2]);
-                ornaments.add(m);
-            }
-            scene.add(ornaments);
+            // 3. 装饰物系统 (InstancedMesh 模拟重型元素)
+            initOrnaments();
 
-            // 灯光
-            const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+            // 4. 环境光与辉光灯
+            const ambient = new THREE.AmbientLight(0x404040, 1);
             scene.add(ambient);
-            const point = new THREE.PointLight(0xF1C40F, 2, 50);
-            point.position.set(5, 5, 5);
-            scene.add(point);
+            const spot = new THREE.SpotLight(0xF1C40F, 10);
+            spot.position.set(10, 20, 10);
+            scene.add(spot);
+
+            document.getElementById('loading').style.opacity = '0';
+            setTimeout(() => document.getElementById('loading').remove(), 1000);
 
             animate();
         }
 
+        function initOrnaments() {
+            ornamentGroup = new THREE.Group();
+            // 礼物盒形态 (Cube)
+            const boxGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+            const lemonMat = new THREE.MeshStandardMaterial({ 
+                color: 0xF1C40F, 
+                emissive: 0xF1C40F, 
+                emissiveIntensity: 2,
+                roughness: 0 
+            });
+
+            // 可爱兔头形态 (简易组合)
+            const rabbitHead = new THREE.SphereGeometry(0.15, 16, 16);
+
+            for(let i=0; i<60; i++) {
+                const isBox = Math.random() > 0.6;
+                const mesh = new THREE.Mesh(isBox ? boxGeo : rabbitHead, lemonMat);
+                
+                // 分配位置索引
+                const idx = Math.floor(Math.random() * count);
+                mesh.userData = { 
+                    idx: idx, 
+                    offset: Math.random() * 2,
+                    rotSpeed: (Math.random() - 0.5) * 0.05 
+                };
+                ornamentGroup.add(mesh);
+            }
+            scene.add(ornamentGroup);
+        }
+
         function animate() {
             requestAnimationFrame(animate);
+            const time = Date.now() * 0.001;
             
+            // 粒子物理逻辑
             const pos = particles.geometry.attributes.position;
-            const lerpFactor = isExploded ? 0.02 : 0.05;
-
             for (let i = 0; i < count; i++) {
                 const i3 = i * 3;
-                const tx = isExploded ? scatterPositions[i3] : treePositions[i3];
-                const ty = isExploded ? scatterPositions[i3+1] : treePositions[i3+1];
-                const tz = isExploded ? scatterPositions[i3+2] : treePositions[i3+2];
+                const weight = data.weights[i];
+                const targetX = isExploded ? data.scatterPos[i3] : data.treePos[i3];
+                const targetY = isExploded ? data.scatterPos[i3+1] : data.treePos[i3+1];
+                const targetZ = isExploded ? data.scatterPos[i3+2] : data.treePos[i3+2];
 
-                pos.array[i3] += (tx - pos.array[i3]) * lerpFactor;
-                pos.array[i3+1] += (ty - pos.array[i3+1]) * lerpFactor;
-                pos.array[i3+2] += (tz - pos.array[i3+2]) * lerpFactor;
+                // 核心：基于权重的阻尼插值
+                const speed = isExploded ? weight * 0.5 : 0.08;
+                pos.array[i3] += (targetX - pos.array[i3]) * speed;
+                pos.array[i3+1] += (targetY - pos.array[i3+1]) * speed;
+                pos.array[i3+2] += (targetZ - pos.array[i3+2]) * speed;
+                
+                // 呼吸感微动
+                if(!isExploded) {
+                    pos.array[i3] += Math.sin(time + i) * 0.002;
+                    pos.array[i3+2] += Math.cos(time + i) * 0.002;
+                }
             }
             pos.needsUpdate = true;
 
-            // 装饰物同步
-            ornaments.children.forEach((m, i) => {
-                m.position.x += (pos.array[i*100] - m.position.x) * 0.1;
-                m.position.y += (pos.array[i*100+1] - m.position.y) * 0.1;
-                m.position.z += (pos.array[i*100+2] - m.position.z) * 0.1;
+            // 装饰物物理同步
+            ornamentGroup.children.forEach(m => {
+                const idx3 = m.userData.idx * 3;
+                m.position.x = pos.array[idx3];
+                m.position.y = pos.array[idx3+1];
+                m.position.z = pos.array[idx3+2];
+                
+                m.rotation.x += m.userData.rotSpeed;
+                m.rotation.y += m.userData.rotSpeed;
             });
 
-            scene.rotation.y += 0.002;
+            scene.rotation.y += 0.001;
             renderer.render(scene, camera);
         }
 
-        // 交互逻辑
         document.getElementById('toggleBtn').onclick = function() {
             isExploded = !isExploded;
-            this.innerText = isExploded ? "RESTORE HARMONY" : "EXPLODE EXPERIENCE";
+            this.innerText = isExploded ? "RESTORE HARMONY" : "INITIATE EXPLOSION";
+            this.style.borderColor = isExploded ? "rgba(168, 187, 161, 0.5)" : "rgba(241, 196, 15, 0.2)";
+            this.style.color = isExploded ? "#A8BBA1" : "#F1C40F";
         };
 
         window.addEventListener('resize', () => {
